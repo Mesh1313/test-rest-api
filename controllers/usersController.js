@@ -1,41 +1,50 @@
-var User = require("../models/index").users;
-var sendResult = require("../utils/commonMiddlewares").sendResult;
-var userForbiddenOptions = ["password", "salt", "authToken", "email"];
+var User = require('../models/index').users;
+var sendResult = require('../utils/commonMiddlewares').sendResult;
+var userForbiddenOptions = ['password', 'salt', 'authToken', 'email'];
 
 function login(req, res, next) {
     var email = req.body.email;
     var password = req.body.password;
     var where = { email: email };
-    var error = new Error();
 
     User.findOne({where: where})
         .then(function(user) {
             if (!user) {
-                error.status = 404;
-                error.fields = [{
-                    field: "password",
-                    message: "Wrong login and/or password, please check your login data"
-                }];
-                error.message = "User not found";
-                return next(error);
+                res.status(404);
+                req.result = {
+                    error: 404,
+                    details: 'User not found',
+                    fields: [{
+                        field: 'password',
+                        message: 'Wrong login and/or password, please check your login data'
+                    }]
+                };
+                return next();
             }
 
             if (user.verifyPassword(password)) {
                 req.result = user.dataValues;
-                next();
-            } else {
-                error.status = 401;
-                error.fields = [{
-                    "field": 'password',
-                    "message": "Wrong login and/or password, please check your login data"
-                }];
-                error.message = "Failed to login";
-                return next(error);
+                return next();
             }
+
+            res.status(401);
+            req.result = {
+                error: 401,
+                details: 'Failed to login',
+                fields: [{
+                    field: 'password',
+                    message: 'Wrong login and/or password, please check your login data'
+                }]
+            };
+            next();
         })
         .catch(function() {
-            res.status(400);
-            next(error);
+            res.status(404);
+            req.result = {
+                error: 400,
+                details: 'Bed request'
+            };
+            return next();
         });
 }
 
@@ -44,7 +53,6 @@ function register(req, res, next) {
     var where = {
         email: email
     };
-    var error = new Error();
 
     User.findOne({where: where})
         .then(function(user) {
@@ -55,56 +63,73 @@ function register(req, res, next) {
                         next();
                     })
                     .catch(function(err) {
-                        error.message = "Bad registration data";
-                        error.status = 400;
-                        error.fields = [];
-
-                        for (var i in error.errors) {
-                            error.fields.push({
-                                "message": error.errors[i].message,
-                                "field": error.errors[i].path
-                            });
-                        }
-
                         res.status(400);
-                        next(error);
-                    })
-            } else {
-                res.status(401);
-                error.status = 401;
-                error.message = "Failed to register";
-                error.fields = [{
-                    "field": 'email',
-                    "message": 'Sorry, user with this email already created. Please Log In.'
-                }];
-                next(error);
+                        req.result = {
+                            error: 400,
+                            details: 'Bad registration data'
+                        };
+                        next();
+                    });
 
+                return;
             }
+
+            res.status(400);
+            req.result = {
+                error: 400,
+                details: 'Bad registration data',
+                fields: [{
+                    field: 'email',
+                    message: 'Sorry, user with this email already exists. Please Log In.'
+                }]
+            };
+            next();
         })
         .catch(function() {
             res.status(400);
-            error.status = 400;
-            error.fields = [{
-                "field": 'email',
-                "message": 'Your email is not valid'
-            }];
-            next(error);
+            req.result = {
+                error: 400,
+                details: 'Bad registration data',
+                fields: [{
+                    'field': 'email',
+                    'message': 'Your email is not valid'
+                }]
+            };
+            next();
         });
 }
 
 function getCurrentUser(req, res, next) {
     var currentUser = req.currentUser;
+    var isAuthenticated = req.isAuthenticated;
 
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            description: 'No access token provided!'
+        };
+        return next();
+    }
     req.result = currentUser.dataValues;
     next();
 }
 
 function updateCurrentUser(req, res, next) {
+    var isAuthenticated = req.isAuthenticated;
     var currentUser = req.currentUser;
     var newUserData = req.body;
     var userUpdateProperties = Object.keys(newUserData);
     var i;
-    var error = new Error();
+
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            description: 'No access token provided!'
+        };
+        return next();
+    }
 
     for (i = 0; i < userUpdateProperties.length; i++) {
         if (userForbiddenOptions.indexOf(userUpdateProperties[i]) >= 0) {
@@ -118,17 +143,12 @@ function updateCurrentUser(req, res, next) {
             next();
         })
         .catch(function() {
-            error.status = 400;
-            error.message = "Bad user data";
-            error.fields = [];
-            for (var i in error.errors) {
-                error.fields.push({
-                    "message": error.errors[i].message,
-                    "field": error.errors[i].path
-                });
-            }
             res.status(400);
-            next(error);
+            req.result = {
+                error: 400,
+                description: 'Bad user data'
+            };
+            next();
         });
 }
 
@@ -136,36 +156,38 @@ function getUserById(req, res, next) {
     var searchQuery = {
         id: req.params.id
     };
-    var error = new Error();
 
     User.findOne({where: searchQuery})
         .then(function(searchUser) {
             if (!searchUser) {
                 res.status(404);
-                error.status = 404;
-                error.message = "User not found";
-                error.fields = [{
-                    "field": 'email',
-                    "message": 'No such user. Please register.'
-                }];
-                next(error);
-                return;
+                req.result = {
+                    error: 404,
+                    description: 'User not found',
+                    fields: [{
+                        'field': 'email',
+                        'message': 'No such user founded. Please register.'
+                    }]
+                };
+                return next();
             }
 
             req.result = searchUser.toJSON();
             next();
         })
         .catch(function() {
-            error.status = 404;
-            error.message = "Id is not found";
-            return next(error);
+            res.status(404);
+            req.result = {
+                error: 404,
+                description: 'User not found',
+            };
+            next();
         });
 }
 
 function getUserByQuery(req, res, next) {
     var queryObj = req.query;
     var where = {$or: {}};
-    var error = new Error();
 
     where.$or = {
         email: {$like: "%" + queryObj.email + "%"},
@@ -178,8 +200,12 @@ function getUserByQuery(req, res, next) {
             next();
         })
         .catch(function() {
-            error.status = 400;
-            next(error);
+            res.status(400);
+            req.result = {
+                error: 400,
+                description: 'Bad request',
+            };
+            next();
         });
 }
 

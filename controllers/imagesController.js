@@ -1,116 +1,267 @@
-var Image = require("../models/index").images;
-var Item = require("../models/index").items;
-var sendResult = require("../utils/commonMiddlewares").sendResult;
-var path = require("path");
-var fs = require("fs");
+var Image = require('../models/index').images;
+var Item = require('../models/index').items;
+var sendResult = require('../utils/commonMiddlewares').sendResult;
+var path = require('path');
+var fs = require('fs');
 var imagesDir = path.dirname(require.main.filename);
+var async = require('async');
 
 function uploadImage (req, res, next) {
-    var itemId = req.params.id;
+    var isAuthenticated = req.isAuthenticated;
     var where = {
-        id: itemId
+        id: req.params.id
     };
-    var newImgData = {};
-    var error = new Error();
 
-    Item.findOne({ where: where })
-        .then(function(item) {
-            if (!item) {
-                error.status = 404;
-                error.message = "Item not found.";
-                return next(error);
-            }
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            details: 'No access token provided!'
+        };
+        return next();
+    }
 
-            newImgData.title = "Item (id" + item.id + ") image";
-            newImgData.description = "Item (id" + item.id + ") image";
-            newImgData.url = req.file.path;
+    async.waterfall([
+        function findItem(callback) {
+            Item.findOne({ where: where })
+                .then(function(item) {
+                    var imgData = {};
 
-            Image.create(newImgData)
-                .then(function(image) {
-                    if (!image) {
-                        error.status = 400;
-                        error.message = "Failed to create image.";
-                        return next(error);
+                    if (!item) {
+                        res.status(404);
+                        req.result = {
+                            error: 404,
+                            details: 'Item not found.'
+                        };
+                        next();
+                        return callback({}, null);
                     }
 
-                    item.update({ imageId: image.id });
+                    imgData.title = 'Item (id' + item.id + ') image';
+                    imgData.description = 'Item (id' + item.id + ') image';
+                    imgData.url = req.file.path;
 
-                    item.dataValues.image = image.dataValues;
-                    req.result = item.dataValues;
-                    next();
+                    callback(null, imgData, item);
                 })
-                .catch(function(err) {
-                    error.status = 400;
-                    error.message = "Failed to create image.";
-                    next(error);
+                .catch(function() {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Bad request.'
+                    };
+                    next();
+                    callback({}, null);
                 });
-        })
-        .catch(function() {
-            error.status = 400;
-            error.message = "Bad request.";
-            next(error);
-        });
-};
+        },
+        function createImage(imgData, item, callback) {
+            Image.create(imgData)
+                .then(function(image) {
+                    if (!image) {
+                        res.status(400);
+                        req.result = {
+                            error: 400,
+                            details: 'Failed to create image.'
+                        };
+                        next();
+                        return callback({}, null);
+                    }
+
+                    callback(null, item, image);
+                })
+                .catch(function() {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to create image.'
+                    };
+                    next();
+                    callback({}, null);
+                });
+        },
+        function updateItem(item, image, callback) {
+            item.update({ imageId: image.id })
+                .then(function(item) {
+                    if(item) {
+                        return callback(null, item, image);
+                    }
+
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to update item.'
+                    };
+                    next();
+                    callback({}, null);
+                })
+                .catch(function() {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to update item.'
+                    };
+                    next();
+                    callback({}, null);
+                });
+        }
+    ], function(err, item, image) {
+        if (err) {
+            return;
+        }
+
+        item.dataValues.image = image.dataValues;
+        req.result = item.dataValues;
+        next();
+    });
+}
+
 function deleteImage (req, res, next) {
-    var itemId = req.params.id;
+    var isAuthenticated = req.isAuthenticated;
     var where = {
-        id: itemId
+        id: req.params.id
     };
     var include = [{
         model: Image,
         required: false,
         as: "image"
     }];
-    var deleteImgWhere = {};
-    var error = new Error();
 
-    Item.findOne({
-        where: where,
-        include: include
-    })
-        .then(function(item) {
-            if (!item) {
-                error.status = 404;
-                error.message = "Item not found.";
-                return next(error);
-            }
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            details: 'No access token provided!'
+        };
+        return next();
+    }
 
-            item.update({ imageId: null });
-            deleteImgWhere.id = item.image.id;
+    async.auto({
+        findItem: function(callback) {
+            Item.findOne({
+                where: where,
+                include: include
+            }).then(function(item) {
+                if (!item) {
+                    res.status(404);
+                    req.result = {
+                        error: 404,
+                        details: 'Item not found.'
+                    };
+                    next();
+                    return callback({}, null);
+                }
 
-            Image.findOne({ where: deleteImgWhere })
+                callback(null, item);
+            }).catch(function() {
+                res.status(400);
+                req.result = {
+                    error: 400,
+                    details: 'Bad request.'
+                };
+                next();
+                callback({}, null);
+            });
+        },
+        updateItem: ['findItem', function(callback, result) {
+            var item = result.findItem;
+
+            item.update({ imageId: null })
+                .then(function(item) {
+                    if (item) {
+                        return callback(null, item);
+                    }
+
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to update item.'
+                    };
+                    next();
+                    callback({}, null);
+                })
+                .catch(function(err) {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to update item.'
+                    };
+                    next();
+                    callback({}, null);
+                });
+        }],
+        findImage: ['findItem', function(callback, result) {
+            var item = result.findItem;
+            var imageId = item.dataValues.image.id;
+            var where = {
+                id: imageId
+            };
+
+            Image.findOne({ where: where })
                 .then(function(image) {
                     if (image) {
-                        image.destroy()
-                            .then(function(img) {
-                                if (img) {
-                                    console.log(imagesDir + "/" + img.url);
-                                    fs.unlinkSync(imagesDir + "/" + img.url);
-
-                                    item.dataValues.image = null;
-                                    req.result = item.dataValues;
-                                    return next();
-                                }
-
-                                error.status = 400;
-                                error.message = "Failed to delete image.";
-                                next(error);
-                            })
-                            .catch(function(err) {
-                                error.status = 400;
-                                error.message = "Failed to delete image.";
-                                next(error);
-                            });
+                        return callback(null, image);
                     }
+
+                    res.status(404);
+                    req.result = {
+                        error: 404,
+                        details: 'Image not found.'
+                    };
+                    next();
+                    callback({}, null);
                 })
-                .catch();
-        })
-        .catch(function() {
-            error.status = 400;
-            error.message = "Bad request.";
-            next(error);
-        });
-};
+                .catch(function() {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to delete image.'
+                    };
+                    next();
+                    callback({}, null);
+                });
+        }],
+        deleteImage: ['findImage', function(callback, result) {
+            var item = result.findItem;
+            var image = result.findImage;
+
+            image.destroy()
+                .then(function(img) {
+                    if (img) {
+                        fs.unlinkSync(imagesDir + "/" + img.url);
+
+                        item.dataValues.image = null;
+                        item.dataValues.imageId = null;
+                        return callback(null, item);
+                    }
+
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to delete image.'
+                    };
+                    next();
+                    return callback({}, null);
+                })
+                .catch(function() {
+                    res.status(400);
+                    req.result = {
+                        error: 400,
+                        details: 'Failed to delete image.'
+                    };
+                    next();
+                    callback({}, null);
+                });
+        }]
+    }, function(err, res) {
+        var item;
+        if (err) {
+            return;
+        }
+
+        item = res.deleteImage.dataValues;
+        req.result = item;
+        next();
+    });
+}
 
 var uploadImageMethods = [
     uploadImage,

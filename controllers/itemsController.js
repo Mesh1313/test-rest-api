@@ -3,8 +3,10 @@ var User = require("../models/index").users;
 var Image = require("../models/index").images;
 var itemForbiddenOptions = ["userId", "createdAt", "imageId"];
 var sendResult = require("../utils/commonMiddlewares").sendResult;
+var async = require('async');
 
-function searchItem(req, res, next) {};
+
+function searchItem(req, res, next) {}
 function getItemById(req, res, next) {
     var id = req.params.id;
     var where = {
@@ -19,7 +21,6 @@ function getItemById(req, res, next) {
         required: false,
         as: "image"
     }];
-    var error = new Error();
 
     Item.findOne({
         where: where,
@@ -27,21 +28,29 @@ function getItemById(req, res, next) {
     })
         .then(function(item) {
             if (!item) {
-                error.status = 404;
-                error.message = "Item not found";
-                return next(error);
+                res.status(404);
+                req.result = {
+                    error: 404,
+                    description: 'Item not found',
+                };
+                return next();
             }
 
             req.result = item.dataValues;
             next();
         })
         .catch(function() {
-            error.status = 404;
-            error.message = "Item not found";
-            next(error);
+            res.status(404);
+            req.result = {
+                error: 404,
+                description: 'Item not found',
+            };
+            next();
         });
-};
+}
+
 function updateItem(req, res, next) {
+    var isAuthenticated = req.isAuthenticated;
     var updateQuery = req.body;
     var whereItem = {
         id: req.params.id
@@ -52,8 +61,16 @@ function updateItem(req, res, next) {
         as: "user"
     }];
     var itemUpdateProperties = Object.keys(updateQuery);
-    var error = new Error();
     var i;
+
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            description: 'No access token provided!'
+        };
+        return next();
+    }
 
     for (i = 0; i < itemUpdateProperties.length; i++) {
         if (itemForbiddenOptions.indexOf(itemUpdateProperties[i]) >= 0) {
@@ -67,9 +84,12 @@ function updateItem(req, res, next) {
     })
         .then(function(item) {
             if (!item) {
-                error.status = 404;
-                error.message = "Item not found."
-                return next(error);
+                res.status(404);
+                req.result = {
+                    error: 404,
+                    description: 'Item not found',
+                };
+                return next();
             }
 
             item.update(updateQuery)
@@ -79,18 +99,26 @@ function updateItem(req, res, next) {
                     next();
                 })
                 .catch(function() {
-                    error.status = 422;
-                    error.message = "Failed to update item."
-                    next(error);
+                    res.status(422);
+                    req.result = {
+                        error: 422,
+                        description: 'Failed to update item.',
+                    };
+                    next();
                 });
         })
         .catch(function() {
-            error.status = 404;
-            error.message = "Item not found."
-            next(error);
+            res.status(404);
+            req.result = {
+                error: 404,
+                description: 'Item not found.'
+            };
+            next();
         });
-};
+}
+
 function deleteItem(req, res, next) {
+    var isAuthenticated = req.isAuthenticated;
     var id = req.params.id;
     var where = {
         id: id
@@ -100,8 +128,15 @@ function deleteItem(req, res, next) {
         required: false,
         as: "image"
     }];
-    var error = new Error();
 
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            description: 'No access token provided!'
+        };
+        return next();
+    }
 
     Item.findOne({
         where: where,
@@ -109,9 +144,12 @@ function deleteItem(req, res, next) {
     })
         .then(function(item) {
             if (!item) {
-                error.status = 404;
-                error.message = "Item not found.";
-                return next(error);
+                res.status(404);
+                req.result = {
+                    error: 404,
+                    description: 'Item not found.'
+                };
+                return next();
             }
 
             item.destroy()
@@ -120,9 +158,12 @@ function deleteItem(req, res, next) {
                     next();
                 })
                 .catch(function() {
-                    error.status = 422;
-                    error.message = "Item not deleted.";
-                    next(error);
+                    res.status(422);
+                    req.result = {
+                        error: 422,
+                        description: 'Item not deleted.'
+                    };
+                    next();
                 });
 
             if (item.image) {
@@ -135,16 +176,28 @@ function deleteItem(req, res, next) {
             }
         })
         .catch(function() {
-            error.status = 400;
-            error.message = "Bad request";
-            next(error);
+            res.status(400);
+            req.result = {
+                error: 400,
+                description: 'Bad request'
+            };
+            next();
         });
-};
+}
+
 function createItem(req, res, next) {
+    var isAuthenticated = req.isAuthenticated;
     var currUser = req.currentUser;
     var createItem = req.body;
-    var error = new Error();
 
+    if (!isAuthenticated) {
+        res.status(401);
+        req.result = {
+            error: 401,
+            description: 'No access token provided!'
+        };
+        return next();
+    }
 
     createItem.userId = currUser.dataValues.id;
     createItem.imageId = null;
@@ -157,11 +210,14 @@ function createItem(req, res, next) {
             next();
         })
         .catch(function(err) {
-            error.status = 400;
-            error.message = "Failed create new item.";
-            next(error);
+            res.status(400);
+            req.result = {
+                error: 400,
+                description: 'Failed to create new item.'
+            };
+            next();
         });
-};
+}
 
 var searchItemMethods = [
     searchItem,

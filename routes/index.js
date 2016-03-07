@@ -5,26 +5,30 @@ var multer = require("multer");
 var upload = multer({ dest: "uploads/" });
 
 module.exports = function(app) {
+
 	//User authentication Api
 	router.post("/login", controllers.users.login);
 	router.post("/register", controllers.users.register);
 
+	//auth middleware
+	app.use(controllers.auth.isAuthenticated);
+
 	//User Api
-	router.get("/me", controllers.auth.isAuthenticated, controllers.users.getCurrentUser);
-	router.put("/me", controllers.auth.isAuthenticated, controllers.users.updateCurrentUser);
-	router.get("/user/:id", controllers.auth.isAuthenticated, controllers.users.getUserById);
-	router.get("/user", controllers.users.getUserByQuery);
+	router.get("/me", controllers.users.getCurrentUser);
+	router.put("/me", controllers.users.updateCurrentUser);
+	router.get("/users/:id", controllers.users.getUserById);
+	router.get("/users", controllers.users.getUserByQuery);
 
 	//Item Api
-	router.get("/item", controllers.items.search);
-	router.get("/item/:id", controllers.items.getById);
-	router.put("/item/:id", controllers.auth.isAuthenticated, controllers.items.update);
-	router.delete("/item/:id", controllers.auth.isAuthenticated, controllers.items.delete);
-	router.post("/item", controllers.auth.isAuthenticated, controllers.items.create);
+	router.get("/items", controllers.items.search);
+	router.get("/items/:id", controllers.items.getById);
+	router.put("/items/:id", controllers.items.update);
+	router.delete("/items/:id", controllers.items.delete);
+	router.post("/items", controllers.items.create);
 
 	//Item Image Api
-	router.post("/item/:id/image", controllers.auth.isAuthenticated, upload.single('image'), controllers.images.upload);
-	router.delete("/item/:id/image", controllers.auth.isAuthenticated, controllers.images.delete);
+	router.post("/items/:id/images", upload.single('image'), controllers.images.upload);
+	router.delete("/items/:id/images", controllers.images.delete);
 
 	return router;
 };
