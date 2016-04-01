@@ -85,7 +85,8 @@ function register(req, res, next) {
             };
             next();
         })
-        .catch(function() {
+        .catch(function(err) {
+            console.log(err);
             res.status(400);
             req.result = {
                 error: 400,

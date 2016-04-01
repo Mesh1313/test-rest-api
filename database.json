@@ -2,7 +2,7 @@
   "dev": {
     "host": "localhost",
     "user": "root",
-    "password": "1111",
+    "password": "111",
     "database": "cltestdb",
     "driver": "mysql",
     "multipleStatements": true
@@ -10,7 +10,7 @@
   "production": {
     "host": "localhost",
     "user": "root",
-    "password": "1111",
+    "password": "111",
     "database": "cltestdb",
     "driver": "mysql",
     "multipleStatements": true

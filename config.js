@@ -4,7 +4,7 @@ var config = {
         port: 3306,
         dbname: "cltestdb",
         user: "root",
-        password: "1111",
+        password: "111",
         charset: 'utf8mb4',
         connectionRetryCount: 5,
         delayBeforeReconnect: 3000,
