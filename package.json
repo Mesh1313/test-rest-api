@@ -6,6 +6,7 @@
   "dependencies": {
     "async": "^1.5.2",
     "body-parser": "^1.14.2",
+    "chai": "^3.5.0",
     "crypto": "^0.0.3",
     "db-migrate": "^0.9.23",
     "express": "^4.13.4",
